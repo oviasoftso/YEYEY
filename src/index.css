@@ -1,0 +1,162 @@
+/* OVIA Prep — Waterfalls Academy. Calm academic theme. */
+/* Segoe UI is system-installed on Windows; we provide a robust fallback chain. */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light mode — Solid White containers, Metallic Silver surfaces, Charcoal ink */
+    --background: 220 14% 96%;        /* soft silver canvas */
+    --foreground: 0 0% 10%;           /* deep charcoal ink */
+
+    --card: 0 0% 100%;                /* solid white containers */
+    --card-foreground: 0 0% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+
+    --primary: 142 64% 28%;           /* academy green from logo */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 7% 89%;          /* metallic silver */
+    --secondary-foreground: 0 0% 10%;
+
+    --muted: 210 8% 92%;
+    --muted-foreground: 220 6% 38%;
+
+    --accent: 210 6% 78%;             /* brushed silver accent */
+    --accent-foreground: 0 0% 10%;
+
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 8% 84%;
+    --input: 210 8% 84%;
+    --ring: 142 64% 28%;
+
+    --radius: 0.625rem;
+
+    /* Sidebar — Deep Charcoal with silver ink for "High-Compute" feel */
+    --sidebar-background: 0 0% 10%;
+    --sidebar-foreground: 210 7% 89%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-primary-foreground: 0 0% 10%;
+    --sidebar-accent: 0 0% 16%;
+    --sidebar-accent-foreground: 210 7% 95%;
+    --sidebar-border: 0 0% 20%;
+    --sidebar-ring: 210 7% 89%;
+
+    --success: 142 64% 32%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 10%;
+    --info: 210 70% 50%;
+    --info-foreground: 0 0% 100%;
+
+    /* Glassmorphism tokens */
+    --glass-bg: 0 0% 100% / 0.6;
+    --glass-border: 0 0% 100% / 0.3;
+    --glass-blur: 18px;
+  }
+
+  .dark {
+    /* Dark mode — Deep Charcoal everywhere, Solid White containers replaced by elevated charcoal */
+    --background: 0 0% 10%;            /* #1A1A1A */
+    --foreground: 210 7% 89%;          /* #E5E7E9 metallic silver */
+
+    --card: 0 0% 13%;
+    --card-foreground: 210 7% 89%;
+
+    --popover: 0 0% 13%;
+    --popover-foreground: 210 7% 89%;
+
+    --primary: 142 50% 55%;            /* lighter academy green for dark bg */
+    --primary-foreground: 0 0% 10%;
+
+    --secondary: 0 0% 18%;
+    --secondary-foreground: 210 7% 89%;
+
+    --muted: 0 0% 16%;
+    --muted-foreground: 210 6% 65%;
+
+    --accent: 0 0% 22%;
+    --accent-foreground: 210 7% 89%;
+
+    --destructive: 0 60% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 142 50% 55%;
+
+    --sidebar-background: 0 0% 7%;
+    --sidebar-foreground: 210 7% 89%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-primary-foreground: 0 0% 10%;
+    --sidebar-accent: 0 0% 14%;
+    --sidebar-accent-foreground: 210 7% 95%;
+    --sidebar-border: 0 0% 18%;
+    --sidebar-ring: 210 7% 89%;
+
+    --success: 142 50% 55%;
+    --success-foreground: 0 0% 10%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 0 0% 10%;
+    --info: 210 70% 60%;
+    --info-foreground: 0 0% 10%;
+
+    --glass-bg: 0 0% 13% / 0.55;
+    --glass-border: 210 7% 89% / 0.12;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-family: "Segoe UI", "Segoe UI Variable", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Segoe UI", "Segoe UI Variable", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  /* UI elements default to semibold per spec */
+  button, label, .ui-label {
+    font-weight: 600;
+  }
+}
+
+@layer utilities {
+  .glass {
+    background: hsl(var(--glass-bg));
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    border: 1px solid hsl(var(--glass-border));
+  }
+
+  .glass-sidebar {
+    background: linear-gradient(180deg, hsl(0 0% 7% / 0.85), hsl(0 0% 12% / 0.85));
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border-right: 1px solid hsl(210 7% 89% / 0.08);
+  }
+
+  .silver-text {
+    color: hsl(210 7% 89%);
+  }
+
+  .academic-shadow {
+    box-shadow: 0 1px 2px hsl(0 0% 0% / 0.06), 0 8px 24px hsl(0 0% 0% / 0.08);
+  }
+}
