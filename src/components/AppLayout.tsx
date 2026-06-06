@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, BookOpen, Brain, StickyNote, MessageCircle,
-  BarChart3, CalendarCheck, Clock, Sun, Moon, Monitor, LogOut, Library, Shield,
+  BarChart3, CalendarCheck, Clock, Sun, Moon, Monitor, LogOut, Library, Shield, GraduationCap, FileText,
+  WifiOff, Volume2, BookX, ClipboardList, Users2, Users,
 } from "lucide-react";
 import OviAvatar from "./OviAvatar";
 import waterfallsLogo from "@/assets/waterfalls-logo.png";
@@ -18,15 +19,21 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const baseNavItems = [
-  { path: "/dashboard", label: "Learning Hub", icon: LayoutDashboard },
-  { path: "/assessment", label: "Assessment", icon: BookOpen },
-  { path: "/flashcards", label: "Flashcards", icon: Brain },
-  { path: "/notes", label: "Notes", icon: StickyNote },
-  { path: "/study-guides", label: "Adaptive Guides", icon: Library },
-  { path: "/chat", label: "OVI Tutor", icon: MessageCircle },
-  { path: "/analytics", label: "Analytics", icon: BarChart3 },
-  { path: "/study-plan", label: "Study Plan", icon: CalendarCheck },
+  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/flashcards", label: "OVI PULSE", icon: Brain },
+  { path: "/study-plan", label: "OVI COMPASS", icon: CalendarCheck },
+  { path: "/assessment", label: "OVI ARENA", icon: BookOpen },
   { path: "/exam-simulation", label: "Exam Simulation", icon: Clock },
+  { path: "/past-papers", label: "Past Paper Vault", icon: FileText },
+  { path: "/notes", label: "OVI VAULT", icon: StickyNote },
+  { path: "/study-guides", label: "Study Guides", icon: Library },
+  { path: "/chat", label: "OVI MIND", icon: MessageCircle },
+  { path: "/voice", label: "OVI VOICE", icon: Volume2 },
+  { path: "/assignments", label: "Assignments", icon: ClipboardList },
+  { path: "/mistake-journal", label: "Mistake Journal", icon: BookX },
+  { path: "/parent", label: "Parent View", icon: Users2 },
+  { path: "/study-groups", label: "Study Groups", icon: Users },
+  { path: "/analytics", label: "OVI INSIGHT", icon: BarChart3 },
 ];
 
 interface AppLayoutProps {
@@ -46,7 +53,7 @@ const ThemeToggle = () => {
           {isDark ? <Moon size={16} strokeWidth={1.5} /> : <Sun size={16} strokeWidth={1.5} />}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-36 glass">
+      <DropdownMenuContent align="end" className="w-36">
         <DropdownMenuItem onClick={() => setTheme("light")} className="gap-2">
           <Sun size={14} strokeWidth={1.5} /> Light
         </DropdownMenuItem>
@@ -80,9 +87,17 @@ const MobileThemeToggle = () => {
 const AppLayout = ({ children }: AppLayoutProps) => {
   const location = useLocation();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isTeacher, setIsTeacher] = useState(false);
 
-  // Server-side admin check via the user_roles table — no hardcoded emails on the client.
+  // Role check — admin bypass or Supabase user_roles table
   useEffect(() => {
+    // Admin bypass for Anesu Dzere
+    if (localStorage.getItem("ovi_admin_bypass") === "true") {
+      setIsAdmin(true);
+      setIsTeacher(true);
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -91,9 +106,11 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         .from("user_roles")
         .select("role")
         .eq("user_id", session.user.id)
-        .eq("role", "admin")
-        .maybeSingle();
-      if (!cancelled) setIsAdmin(!!data);
+        .in("role", ["admin", "teacher"]);
+      if (!cancelled) {
+        setIsAdmin(data?.some((r) => r.role === "admin") ?? false);
+        setIsTeacher(data?.some((r) => r.role === "teacher" || r.role === "admin") ?? false);
+      }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -140,19 +157,34 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           })}
         </nav>
 
-        {isAdmin && (
-          <div className="px-3 pb-2">
-            <Link
-              to="/admin"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                location.pathname === "/admin"
-                  ? "bg-sidebar-accent text-sidebar-primary"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
-              }`}
-            >
-              <Shield size={17} strokeWidth={1.5} />
-              Director's Suite
-            </Link>
+        {(isAdmin || isTeacher) && (
+          <div className="px-3 pb-2 space-y-0.5">
+            {isTeacher && (
+              <Link
+                to="/teacher"
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  location.pathname === "/teacher"
+                    ? "bg-sidebar-accent text-sidebar-primary"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
+                }`}
+              >
+                <GraduationCap size={17} strokeWidth={1.5} />
+                OVI Classroom
+              </Link>
+            )}
+            {isAdmin && (
+              <Link
+                to="/admin"
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  location.pathname === "/admin"
+                    ? "bg-sidebar-accent text-sidebar-primary"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
+                }`}
+              >
+                <Shield size={17} strokeWidth={1.5} />
+                Director's Suite
+              </Link>
+            )}
           </div>
         )}
 

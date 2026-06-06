@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Loader2, Save, FileText, Target, Download, Trash2 } from "lucide-react";
+import { Loader2, Save, FileText, Target, Download, Trash2, Brain, BookOpen, Lightbulb, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import AppLayout from "@/components/AppLayout";
 import OviAvatar from "@/components/OviAvatar";
 import LatexText from "@/components/LatexText";
+import OviVoice from "@/components/OviVoice";
+import AIRevisionNotes from "@/components/AIRevisionNotes";
 import { store } from "@/lib/store";
 import { SUBJECT_TOPICS, SUBJECT_ICONS } from "@/lib/constants";
 import { StudentProfile, RevisionNote } from "@/lib/types";
@@ -18,6 +20,11 @@ import { toast } from "@/hooks/use-toast";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
 import { saveAs } from "file-saver";
 
+interface VaultFlashcard {
+  front: string;
+  back: string;
+}
+
 const NotesPage = () => {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<StudentProfile | null>(null);
@@ -25,6 +32,9 @@ const NotesPage = () => {
   const [selectedSubject, setSelectedSubject] = useState("");
   const [selectedTopic, setSelectedTopic] = useState("");
   const [generatedContent, setGeneratedContent] = useState("");
+  const [keyTerms, setKeyTerms] = useState<string[]>([]);
+  const [examTips, setExamTips] = useState<string[]>([]);
+  const [vaultFlashcards, setVaultFlashcards] = useState<VaultFlashcard[]>([]);
   const [loading, setLoading] = useState(false);
   const [weakConcepts, setWeakConcepts] = useState<string[]>([]);
 
@@ -52,6 +62,9 @@ const NotesPage = () => {
   const generate = async () => {
     setLoading(true);
     setGeneratedContent("");
+    setKeyTerms([]);
+    setExamTips([]);
+    setVaultFlashcards([]);
     try {
       const assessments = store.getAssessments();
       const relevantAssessments = assessments
@@ -59,21 +72,67 @@ const NotesPage = () => {
         .slice(-5)
         .map(a => ({ subject: a.subject, topic: a.topic, percentage: a.percentage }));
 
-      const { data, error } = await supabase.functions.invoke("generate-notes", {
+      const { data, error } = await supabase.functions.invoke("ovi_vault_note_generator", {
         body: {
           subject: selectedSubject,
           topic: selectedTopic,
           weakConcepts: weakConcepts.length > 0 ? weakConcepts : undefined,
           assessmentHistory: relevantAssessments.length > 0 ? relevantAssessments : undefined,
+          noteStyle: "deep",
         },
       });
       if (error) throw error;
       setGeneratedContent(data.content);
+      setKeyTerms(data.keyTerms || []);
+      setExamTips(data.examTips || []);
+      setVaultFlashcards(data.flashcards || []);
     } catch {
-      toast({ title: "Error", description: "Failed to generate notes.", variant: "destructive" });
+      // Fallback to legacy function
+      try {
+        const assessments = store.getAssessments();
+        const relevantAssessments = assessments
+          .filter(a => a.subject === selectedSubject)
+          .slice(-5)
+          .map(a => ({ subject: a.subject, topic: a.topic, percentage: a.percentage }));
+
+        const { data, error } = await supabase.functions.invoke("generate-notes", {
+          body: {
+            subject: selectedSubject,
+            topic: selectedTopic,
+            weakConcepts: weakConcepts.length > 0 ? weakConcepts : undefined,
+            assessmentHistory: relevantAssessments.length > 0 ? relevantAssessments : undefined,
+          },
+        });
+        if (error) throw error;
+        setGeneratedContent(data.content);
+      } catch {
+        toast({ title: "Error", description: "Failed to generate notes.", variant: "destructive" });
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const addFlashcardsFromVault = () => {
+    if (vaultFlashcards.length === 0) return;
+    let count = 0;
+    for (const fc of vaultFlashcards) {
+      store.addFlashcard({
+        id: crypto.randomUUID(),
+        subject: selectedSubject,
+        topic: selectedTopic || "General",
+        question: fc.front,
+        answer: fc.back,
+        difficulty: 5,
+        stability: 1,
+        retrievability: 1,
+        last_review: null,
+        next_review: null,
+        review_count: 0,
+      });
+      count++;
+    }
+    toast({ title: "Flashcards Added!", description: `${count} flashcards added from OVI VAULT notes.` });
   };
 
   const saveNote = async () => {
@@ -187,8 +246,9 @@ const NotesPage = () => {
         </div>
 
         <Tabs defaultValue="generate">
-          <TabsList>
+          <TabsList className="grid grid-cols-3 w-full">
             <TabsTrigger value="generate">Generate Notes</TabsTrigger>
+            <TabsTrigger value="ai-notes">AI Notes</TabsTrigger>
             <TabsTrigger value="saved">Cloud Notes ({savedNotes.length})</TabsTrigger>
           </TabsList>
 
@@ -244,11 +304,12 @@ const NotesPage = () => {
             </Card>
 
             {generatedContent && (
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle>{selectedSubject} — {selectedTopic}</CardTitle>
                     <div className="flex gap-2">
+                      <OviVoice text={generatedContent.replace(/[#*_`~\[\]]/g, "").slice(0, 3000)} size="sm" />
                       <Button size="sm" variant="outline" onClick={() => downloadAsDocx(selectedSubject, selectedTopic, generatedContent)} className="gap-1">
                         <Download size={14} /> Save DOCX
                       </Button>
@@ -259,8 +320,80 @@ const NotesPage = () => {
                     <LatexText>{generatedContent}</LatexText>
                   </CardContent>
                 </Card>
+
+                {/* Key Terms */}
+                {keyTerms.length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <BookOpen size={16} className="text-primary" /> Key Terms
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {keyTerms.map((term, i) => (
+                          <Badge key={i} variant="secondary" className="text-xs">{term}</Badge>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Exam Tips */}
+                {examTips.length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Lightbulb size={16} className="text-amber-500" /> ZIMSEC Exam Tips
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="space-y-2">
+                        {examTips.map((tip, i) => (
+                          <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                            <Target size={14} className="shrink-0 mt-0.5 text-primary" />
+                            {tip}
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* OVI VAULT Flashcards */}
+                {vaultFlashcards.length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Brain size={16} className="text-violet-500" /> Generated Flashcards ({vaultFlashcards.length})
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3 mb-4">
+                        {vaultFlashcards.slice(0, 3).map((fc, i) => (
+                          <div key={i} className="p-3 rounded-lg border bg-muted/30">
+                            <p className="text-sm font-medium text-foreground">Q: {fc.front}</p>
+                            <p className="text-sm text-muted-foreground mt-1">A: {fc.back}</p>
+                          </div>
+                        ))}
+                        {vaultFlashcards.length > 3 && (
+                          <p className="text-xs text-muted-foreground text-center">
+                            +{vaultFlashcards.length - 3} more flashcards
+                          </p>
+                        )}
+                      </div>
+                      <Button size="sm" onClick={addFlashcardsFromVault} className="gap-1.5 w-full">
+                        <Brain size={14} /> Add All to Flashcards
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
               </motion.div>
             )}
+          </TabsContent>
+
+          <TabsContent value="ai-notes" className="space-y-4 mt-4">
+            <AIRevisionNotes />
           </TabsContent>
 
           <TabsContent value="saved" className="space-y-4 mt-4">

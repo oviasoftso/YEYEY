@@ -136,7 +136,7 @@ const Landing = () => {
             { icon: CalendarCheck, label: "Personalised Study Plan" },
             { icon: Brain, label: "Spaced-Repetition Flashcards" },
           ].map((c) => (
-            <div key={c.label} className="glass academic-shadow rounded-xl p-4 border border-border flex items-center gap-3">
+            <div key={c.label} className="elevated-card rounded-xl p-4 flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                 <c.icon size={18} strokeWidth={1.5} />
               </div>
@@ -148,7 +148,7 @@ const Landing = () => {
 
       {/* Data Safety Badge */}
       <section className="max-w-7xl mx-auto px-6 pb-20">
-        <div className="flex items-center justify-center gap-3 glass border border-border rounded-xl px-6 py-4">
+        <div className="flex items-center justify-center gap-3 elevated-card rounded-xl px-6 py-4">
           <Shield className="text-primary shrink-0" size={22} strokeWidth={1.5} />
           <div>
             <span className="text-sm font-semibold text-foreground">Data Safety Verified</span>

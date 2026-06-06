@@ -5,6 +5,10 @@ import { store } from "@/lib/store";
 import { Loader2, ShieldX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+// Admin bypass — Anesu Dzere can access everything without Supabase auth
+const ADMIN_BYPASS_KEY = "ovi_admin_bypass";
+const ADMIN_USER = { id: "admin-anesu-dzere", name: "Anesu Dzere", email: "admin@ovia.local" };
+
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
@@ -16,7 +20,31 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
+    // Check admin bypass first
+    const bypass = localStorage.getItem(ADMIN_BYPASS_KEY);
+    if (bypass === "true") {
+      // Ensure admin profile exists
+      const profile = store.getProfile();
+      if (!profile) {
+        store.setProfile({
+          id: ADMIN_USER.id,
+          name: ADMIN_USER.name,
+          stream: "science",
+          subjects: ["Mathematics", "English Language", "Combined Science", "Physics", "Chemistry", "Biology", "Accounting", "Business Studies"],
+          language_pref: "en",
+          avatar_url: null,
+        });
+      }
+      setAuthenticated(true);
+      setLoading(false);
+      return;
+    }
+
+    let mounted = true;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+
       if (session) {
         // Check if user is blocked
         const { data: blockData } = await supabase
@@ -34,25 +62,36 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
         // Sync data from cloud if local cache is empty
         const localProfile = store.getProfile();
         if (!localProfile) {
-          await store.syncFromCloud();
+          try {
+            await store.syncFromCloud();
+          } catch {
+            // Cloud sync failed — continue with local data
+          }
         }
         setAuthenticated(true);
       } else {
-        store.clearLocal();
-        setAuthenticated(false);
-        navigate("/auth");
+        // Only redirect if we're sure there's no session (not just loading)
+        if (event !== "INITIAL_SESSION") {
+          store.clearLocal();
+          navigate("/auth");
+        }
       }
       setLoading(false);
     });
 
+    // Initial session check
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
       if (!session) {
         navigate("/auth");
         setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [navigate]);
 
   if (loading) {
@@ -76,6 +115,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
             variant="outline"
             onClick={async () => {
               store.clearLocal();
+              localStorage.removeItem(ADMIN_BYPASS_KEY);
               await supabase.auth.signOut();
               window.location.href = "/";
             }}

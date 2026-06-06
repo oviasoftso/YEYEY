@@ -55,10 +55,6 @@
     --info: 210 70% 50%;
     --info-foreground: 0 0% 100%;
 
-    /* Glassmorphism tokens */
-    --glass-bg: 0 0% 100% / 0.6;
-    --glass-border: 0 0% 100% / 0.3;
-    --glass-blur: 18px;
   }
 
   .dark {
@@ -107,8 +103,6 @@
     --info: 210 70% 60%;
     --info-foreground: 0 0% 10%;
 
-    --glass-bg: 0 0% 13% / 0.55;
-    --glass-border: 210 7% 89% / 0.12;
   }
 }
 
@@ -118,45 +112,58 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans;
-    font-family: "Segoe UI", "Segoe UI Variable", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    @apply bg-background text-foreground;
+    font-family: "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     font-weight: 400;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: "Segoe UI", "Segoe UI Variable", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    font-family: "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     font-weight: 700;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.025em;
+    line-height: 1.15;
   }
 
-  /* UI elements default to semibold per spec */
   button, label, .ui-label {
     font-weight: 600;
+    letter-spacing: -0.01em;
   }
 }
 
 @layer utilities {
-  .glass {
-    background: hsl(var(--glass-bg));
-    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-    border: 1px solid hsl(var(--glass-border));
-  }
-
+  /* Sidebar — solid dark, no blur */
   .glass-sidebar {
-    background: linear-gradient(180deg, hsl(0 0% 7% / 0.85), hsl(0 0% 12% / 0.85));
-    backdrop-filter: blur(20px) saturate(140%);
-    -webkit-backdrop-filter: blur(20px) saturate(140%);
-    border-right: 1px solid hsl(210 7% 89% / 0.08);
+    background: hsl(0 0% 9%);
+    border-right: 1px solid hsl(0 0% 18%);
   }
 
-  .silver-text {
-    color: hsl(210 7% 89%);
+  /* Elevated card — intentional shadow hierarchy */
+  .elevated-card {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    box-shadow:
+      0 1px 3px hsl(0 0% 0% / 0.04),
+      0 4px 16px hsl(0 0% 0% / 0.06);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+  }
+  .elevated-card:hover {
+    box-shadow:
+      0 2px 6px hsl(0 0% 0% / 0.06),
+      0 8px 24px hsl(0 0% 0% / 0.08);
+    transform: translateY(-1px);
   }
 
-  .academic-shadow {
-    box-shadow: 0 1px 2px hsl(0 0% 0% / 0.06), 0 8px 24px hsl(0 0% 0% / 0.08);
+  /* Entrance animation */
+  @keyframes float-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-float-in {
+    animation: float-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 }

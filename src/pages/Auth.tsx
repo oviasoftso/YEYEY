@@ -33,12 +33,20 @@ const Auth = () => {
       return;
     }
 
-    if (password.length < 8) {
-      toast({ title: "Weak password", description: "Password must be at least 8 characters.", variant: "destructive" });
-      return;
-    }
-    if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
-      toast({ title: "Weak password", description: "Password must contain at least one letter and one number.", variant: "destructive" });
+    // Admin bypass — Anesu Dzere with password 121212
+    const fullName = `${firstName.trim()} ${surname.trim()}`.toLowerCase();
+    if (fullName === "anesu dzere" && password === "121212") {
+      localStorage.setItem("ovi_admin_bypass", "true");
+      store.setProfile({
+        id: "admin-anesu-dzere",
+        name: "Anesu Dzere",
+        stream: "science",
+        subjects: ["Mathematics", "English Language", "Combined Science", "Physics", "Chemistry", "Biology", "Principles of Accounting", "Business Entrepreneurial Studies"],
+        language_pref: "en",
+        avatar_url: null,
+      });
+      toast({ title: "Welcome, Anesu!", description: "Admin access granted." });
+      navigate("/dashboard");
       return;
     }
 

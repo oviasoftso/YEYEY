@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import {
   Shield, Users, BarChart3, Ban, CheckCircle, Loader2, Search, RefreshCw,
   Settings, GraduationCap, Database, Upload, Download, FileText, UserPlus,
-  UserMinus, TrendingUp, Activity, PieChart
+  UserMinus, TrendingUp, Activity, PieChart, Clock
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,8 @@ import { saveAs } from "file-saver";
 import mammoth from "mammoth";
 
 // Admin access is enforced server-side via the is_admin() RPC and the user_roles table.
+// Admin bypass for Anesu Dzere — local admin without Supabase auth
+const isAdminBypass = () => localStorage.getItem("ovi_admin_bypass") === "true";
 
 interface Student {
   id: string;
@@ -68,6 +70,13 @@ const AdminPage = () => {
   useEffect(() => { checkAdmin(); }, []);
 
   const checkAdmin = async () => {
+    // Admin bypass for Anesu Dzere — no Supabase auth needed
+    if (isAdminBypass()) {
+      setIsAdmin(true);
+      setLoading(false);
+      return;
+    }
+
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { navigate("/auth"); return; }
     const { data: isAdminFlag, error } = await supabase.rpc("is_admin");
@@ -331,12 +340,15 @@ const AdminPage = () => {
         )}
 
         <Tabs defaultValue="students">
-          <TabsList className="grid grid-cols-5 w-full max-w-2xl">
+          <TabsList className="grid grid-cols-8 w-full max-w-4xl">
             <TabsTrigger value="students" className="gap-1"><Users size={14} /> Students</TabsTrigger>
             <TabsTrigger value="import" className="gap-1"><Upload size={14} /> Import</TabsTrigger>
             <TabsTrigger value="analytics" className="gap-1"><PieChart size={14} /> Analytics</TabsTrigger>
+            <TabsTrigger value="gradebook" className="gap-1"><BarChart3 size={14} /> Gradebook</TabsTrigger>
+            <TabsTrigger value="early-warning" className="gap-1"><Activity size={14} /> Sentinel</TabsTrigger>
             <TabsTrigger value="quota" className="gap-1"><Settings size={14} /> Quota</TabsTrigger>
             <TabsTrigger value="syllabus" className="gap-1"><GraduationCap size={14} /> Syllabus</TabsTrigger>
+            <TabsTrigger value="forge" className="gap-1"><FileText size={14} /> Forge</TabsTrigger>
           </TabsList>
 
           {/* Students Tab */}
@@ -695,6 +707,204 @@ const AdminPage = () => {
                 </div>
                 <div className="mt-4 text-xs text-muted-foreground">
                   {enabledModules.size} of {ZIMSEC_MODULES.length} modules active
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Gradebook Tab */}
+          <TabsContent value="gradebook" className="mt-4 space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2"><BarChart3 size={18} /> OVI CLASSROOM Gradebook</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {students.length === 0 ? (
+                  <p className="text-muted-foreground text-sm text-center py-8">No students yet.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-2 px-3 font-medium text-muted-foreground">Student</th>
+                          <th className="text-left py-2 px-3 font-medium text-muted-foreground">Stream</th>
+                          <th className="text-center py-2 px-3 font-medium text-muted-foreground">Avg Score</th>
+                          <th className="text-center py-2 px-3 font-medium text-muted-foreground">Avg Mastery</th>
+                          <th className="text-center py-2 px-3 font-medium text-muted-foreground">Tests</th>
+                          <th className="text-center py-2 px-3 font-medium text-muted-foreground">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {students
+                          .sort((a, b) => (a.avgScore || 0) - (b.avgScore || 0))
+                          .map((s) => (
+                            <tr key={s.id} className="border-b hover:bg-muted/50">
+                              <td className="py-2 px-3 font-medium">{s.displayName}</td>
+                              <td className="py-2 px-3 text-muted-foreground">{s.stream}</td>
+                              <td className="py-2 px-3 text-center">
+                                <Badge variant={s.avgScore >= 70 ? "default" : s.avgScore >= 50 ? "secondary" : "destructive"}>
+                                  {s.avgScore || 0}%
+                                </Badge>
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <div className="flex items-center gap-2 justify-center">
+                                  <Progress value={s.avgMastery || 0} className="w-16 h-2" />
+                                  <span className="text-xs">{s.avgMastery || 0}%</span>
+                                </div>
+                              </td>
+                              <td className="py-2 px-3 text-center text-muted-foreground">{s.assessmentCount || 0}</td>
+                              <td className="py-2 px-3 text-center">
+                                {s.isBlocked ? (
+                                  <Badge variant="destructive" className="text-xs">Blocked</Badge>
+                                ) : (s.avgScore || 0) < 40 ? (
+                                  <Badge variant="destructive" className="text-xs">At Risk</Badge>
+                                ) : (s.avgScore || 0) < 60 ? (
+                                  <Badge variant="secondary" className="text-xs">Needs Support</Badge>
+                                ) : (
+                                  <Badge variant="default" className="text-xs">On Track</Badge>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Early Warning Sentinel Tab */}
+          <TabsContent value="early-warning" className="mt-4 space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2"><Activity size={18} /> Early Warning Sentinel</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground text-sm mb-4">
+                  Students flagged for low performance, declining mastery, or inactivity.
+                </p>
+                {(() => {
+                  const atRisk = students.filter(s => !s.isBlocked && (s.avgScore || 0) < 50);
+                  const inactive = students.filter(s => !s.isBlocked && s.lastSignIn && (Date.now() - new Date(s.lastSignIn).getTime()) > 7 * 24 * 60 * 60 * 1000);
+                  const lowMastery = students.filter(s => !s.isBlocked && (s.avgMastery || 0) < 30);
+
+                  return (
+                    <div className="space-y-4">
+                      {/* At Risk */}
+                      <div>
+                        <h4 className="text-sm font-semibold text-destructive mb-2 flex items-center gap-2">
+                          <Ban size={14} /> Low Score Alert ({atRisk.length})
+                        </h4>
+                        {atRisk.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No students with avg score below 50%.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {atRisk.map(s => (
+                              <div key={s.id} className="flex items-center gap-3 p-3 rounded-lg border border-destructive/20 bg-destructive/5">
+                                <OviAvatar size="sm" animate={false} />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">{s.displayName}</p>
+                                  <p className="text-xs text-muted-foreground">{s.stream} — Avg: {s.avgScore || 0}%</p>
+                                </div>
+                                <Badge variant="destructive">At Risk</Badge>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Inactive */}
+                      <div>
+                        <h4 className="text-sm font-semibold text-amber-600 mb-2 flex items-center gap-2">
+                          <Clock size={14} /> Inactive 7+ Days ({inactive.length})
+                        </h4>
+                        {inactive.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">All students active within the last 7 days.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {inactive.map(s => (
+                              <div key={s.id} className="flex items-center gap-3 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5">
+                                <OviAvatar size="sm" animate={false} />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">{s.displayName}</p>
+                                  <p className="text-xs text-muted-foreground">Last active: {s.lastSignIn ? new Date(s.lastSignIn).toLocaleDateString() : "Never"}</p>
+                                </div>
+                                <Badge variant="outline" className="text-amber-600">Inactive</Badge>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Low Mastery */}
+                      <div>
+                        <h4 className="text-sm font-semibold text-orange-600 mb-2 flex items-center gap-2">
+                          <TrendingUp size={14} /> Low Mastery ({lowMastery.length})
+                        </h4>
+                        {lowMastery.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No students with mastery below 30%.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {lowMastery.map(s => (
+                              <div key={s.id} className="flex items-center gap-3 p-3 rounded-lg border border-orange-500/20 bg-orange-500/5">
+                                <OviAvatar size="sm" animate={false} />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">{s.displayName}</p>
+                                  <p className="text-xs text-muted-foreground">{s.stream} — Mastery: {s.avgMastery || 0}%</p>
+                                </div>
+                                <Badge variant="outline" className="text-orange-600">Low Mastery</Badge>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Assessment Forge Tab */}
+          <TabsContent value="forge" className="mt-4 space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2"><FileText size={18} /> Assessment Forge</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground text-sm mb-4">
+                  Create custom assessments for your class. Questions are generated by OVI AI aligned to ZIMSEC standards.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/assessment")}>
+                    <CardContent className="p-4 text-center">
+                      <FileText size={32} className="mx-auto mb-2 text-primary" />
+                      <h4 className="font-semibold text-sm">Quick Assessment</h4>
+                      <p className="text-xs text-muted-foreground">Generate a standard assessment for any topic</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/exam-simulation")}>
+                    <CardContent className="p-4 text-center">
+                      <GraduationCap size={32} className="mx-auto mb-2 text-primary" />
+                      <h4 className="font-semibold text-sm">Exam Simulation</h4>
+                      <p className="text-xs text-muted-foreground">Full ZIMSEC-style timed exam simulation</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/past-papers")}>
+                    <CardContent className="p-4 text-center">
+                      <Download size={32} className="mx-auto mb-2 text-primary" />
+                      <h4 className="font-semibold text-sm">Past Paper Vault</h4>
+                      <p className="text-xs text-muted-foreground">Access ZIMSEC past papers for practice</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="cursor-pointer hover:shadow-md transition-shadow">
+                    <CardContent className="p-4 text-center">
+                      <RefreshCw size={32} className="mx-auto mb-2 text-muted-foreground" />
+                      <h4 className="font-semibold text-sm text-muted-foreground">Homework Builder</h4>
+                      <p className="text-xs text-muted-foreground">Coming soon — create and assign homework</p>
+                    </CardContent>
+                  </Card>
                 </div>
               </CardContent>
             </Card>

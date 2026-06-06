@@ -8,18 +8,44 @@ function marksFromQuestion(question: string, fallback = 5) {
 }
 
 function fallbackMarking(subject: string, topic: string, questions: string[], answers: string[]) {
+  // Extract command words from questions
+  const commandWords = ["Define", "State", "Explain", "Describe", "Calculate", "Evaluate", "Justify", "Discuss", "Suggest", "Compare", "Determine", "Deduce"];
+
   const results = questions.map((q, i) => {
     const answer = answers[i]?.trim();
     const marksAllocated = marksFromQuestion(q);
     const marksAwarded = answer ? Math.max(1, Math.round(marksAllocated * 0.4)) : 0;
+
+    // Detect command word
+    const cmdWord = commandWords.find(c => q.includes(`[${c}]`)) || "Explain";
+
+    const cmdGuidance: Record<string, string> = {
+      "Define": "Give a precise 1-2 sentence definition. Use ZIMSEC-standard terminology.",
+      "State": "Name the fact or concept briefly — no explanation needed.",
+      "Explain": "Include HOW and WHY. Use cause → effect → result structure.",
+      "Describe": "Give a step-by-step account in logical sequence.",
+      "Calculate": "Show ALL working steps. Include units. Box your final answer.",
+      "Evaluate": "Present BOTH sides (strengths and weaknesses) AND give a conclusion/judgment.",
+      "Justify": "Give EVIDENCE and REASONS supporting your position.",
+      "Discuss": "Give arguments FOR and AGAINST, then conclude with your view.",
+      "Suggest": "Apply your knowledge to a new situation. Be creative but logical.",
+      "Compare": "State similarities AND differences between the two things.",
+      "Determine": "Use the given information to reach a conclusion. Show your method.",
+      "Deduce": "Reach a conclusion FROM the information given in the question.",
+    };
+
     return {
       question: q,
       studentAnswer: answer || "Not answered",
-      correctAnswer: `Model answer guidance: revise ${topic} in ${subject}, define the key terms, show required working, and answer using ZIMSEC command words.`,
+      correctAnswer: `**Model Answer (${cmdWord} — ${marksAllocated} marks):**\n\nThis is a "${cmdWord}" question on **${topic}** in ${subject}.\n\n**${cmdGuidance[cmdWord] || "Address all key points clearly."}**\n\n**Key points a top student would include:**\n• Define/state the key concept using correct ZIMSEC terminology\n• Explain the underlying principles with cause → effect → result structure\n• Give a specific example relevant to ${topic}\n• Use correct scientific/mathematical notation where applicable\n\n**How to structure your ${marksAllocated}-mark response:**\n1. Opening statement or definition (${Math.max(1, Math.round(marksAllocated * 0.2))} marks)\n2. Detailed explanation with reasoning (${Math.max(1, Math.round(marksAllocated * 0.4))} marks)\n3. Example, calculation, or application (${Math.max(1, Math.round(marksAllocated * 0.3))} marks)\n4. Conclusion or final answer (${Math.max(1, Math.round(marksAllocated * 0.1))} marks)\n\n⚠️ **Note:** AI grading was unavailable for this session. Review the revision notes for **${subject} — ${topic}** to see the full model answer with all marking points.`,
       marksAllocated,
       marksAwarded,
-      explanation: answer ? "OVI could not complete full AI marking, so this provisional mark rewards a relevant attempt." : "No answer was provided, so 0 marks were awarded.",
-      improvementAdvice: `Revise ${topic}, practise one structured response, and include clear points matched to the mark allocation.`,
+      explanation: answer
+        ? `You attempted this ${cmdWord.toLowerCase()} question and earned ${marksAwarded} out of ${marksAllocated} marks.\n\n${marksAwarded < marksAllocated ? `**What to improve:** ${cmdGuidance[cmdWord] || "Address all key points more thoroughly."}\n\nCompare your answer with the model answer above — look for key points you missed.` : "Excellent work! Your answer covers the key points."}\n\n**Your answer:**\n${answer}`
+        : `**No answer provided** — 0 marks.\n\nNever leave a question blank! Even a partial answer can earn marks.\n\nThis is a "${cmdWord}" question: ${cmdGuidance[cmdWord] || "Address all key points."}\n\nThe model answer above shows exactly what you should write.`,
+      improvementAdvice: answer
+        ? `**Action plan for "${cmdWord}" questions on ${topic}:**\n\n${cmdGuidance[cmdWord] || "Address all key points."}\n\n**Specific steps:**\n1. Open your revision notes to ${subject} — ${topic}\n2. Read the key definitions and principles\n3. Practise writing a ${marksAllocated}-mark response using the structure in the model answer\n4. Time yourself — aim for ${Math.max(2, marksAllocated)} minutes per ${marksAllocated} marks\n\n**Remember:** ZIMSEC examiners award marks for specific key points. Make sure you hit all of them.`
+        : `**NEVER leave a question blank!**\n\nThis "${cmdWord}" question is worth ${marksAllocated} marks.\n\n${cmdGuidance[cmdWord]} Even writing 2-3 relevant points could earn you partial marks.\n\n**Quick strategy:** Read the question, identify the command word, then write whatever you know about ${topic}. Partial marks add up!`,
     };
   });
   const totalScore = results.reduce((sum, r) => sum + r.marksAwarded, 0);
@@ -93,11 +119,26 @@ Mark each student answer step-by-step like a real ZIMSEC examiner using partial 
 
 ${FORMATTING_PREAMBLE}
 
-IMPORTANT: If a student left a question blank or did not answer:
-- Award 0 marks for that question
-- Still provide the FULL correct/model answer with all working shown
-- Still provide a detailed explanation
-- Give specific advice on how to approach this type of question
+CRITICAL RULES:
+1. If a student left a question blank or did not answer:
+   - Award 0 marks for that question
+   - Still provide the FULL correct/model answer with all working shown
+   - Still provide a detailed explanation
+   - Give specific advice on how to approach this type of question
+
+2. The correctAnswer field MUST contain a FULL MODEL ANSWER — not just a summary or hint.
+   - This is what a top student would write to get FULL marks
+   - Include all steps, working, key terms, and structure
+   - The student uses this to learn — it must be complete and educational
+
+3. The explanation field MUST explain WHY marks were given or deducted
+   - Reference specific points the student made or missed
+   - Compare their answer to the model answer
+
+4. The improvementAdvice field MUST be specific and actionable
+   - Don't just say "revise more" — say WHAT to revise and HOW
+   - Reference the command word requirement if applicable
+   - Suggest specific study strategies
 
 For each question provide:
 - question: the original question text (preserve any LaTeX formatting)

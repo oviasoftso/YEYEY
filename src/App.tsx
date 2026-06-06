@@ -16,9 +16,17 @@ import Analytics from "./pages/Analytics";
 import StudyPlan from "./pages/StudyPlan";
 import ExamSimulation from "./pages/ExamSimulation";
 import StudyGuides from "./pages/StudyGuides";
+import PastPaperVault from "./pages/PastPaperVault";
 import Admin from "./pages/Admin";
+import TeacherCommandCentre from "./pages/TeacherCommandCentre";
+import OviVoicePage from "./pages/OviVoicePage";
+import MistakeJournalPage from "./pages/MistakeJournal";
+import AssignmentsPage from "./pages/Assignments";
+import ParentDashboard from "./pages/ParentDashboard";
+import StudyGroups from "./pages/StudyGroups";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
+import OfflineBanner from "./components/OfflineBanner";
 import { CurriculumProvider } from "./lib/curriculum";
 
 const queryClient = new QueryClient();
@@ -29,6 +37,7 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
+        <OfflineBanner />
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Landing />} />
@@ -44,7 +53,14 @@ const App = () => (
             <Route path="/study-plan" element={<ProtectedRoute><StudyPlan /></ProtectedRoute>} />
             <Route path="/exam-simulation" element={<ProtectedRoute><ExamSimulation /></ProtectedRoute>} />
             <Route path="/study-guides" element={<ProtectedRoute><StudyGuides /></ProtectedRoute>} />
+            <Route path="/past-papers" element={<ProtectedRoute><PastPaperVault /></ProtectedRoute>} />
+            <Route path="/voice" element={<ProtectedRoute><OviVoicePage /></ProtectedRoute>} />
+            <Route path="/mistake-journal" element={<ProtectedRoute><MistakeJournalPage /></ProtectedRoute>} />
+            <Route path="/assignments" element={<ProtectedRoute><AssignmentsPage /></ProtectedRoute>} />
+            <Route path="/parent" element={<ProtectedRoute><ParentDashboard /></ProtectedRoute>} />
+            <Route path="/study-groups" element={<ProtectedRoute><StudyGroups /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+            <Route path="/teacher" element={<ProtectedRoute><TeacherCommandCentre /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

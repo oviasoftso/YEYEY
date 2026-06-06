@@ -51,7 +51,7 @@ const ExamSimulation = () => {
       }, 1000);
       return () => clearInterval(timerRef.current);
     }
-  }, [phase]);
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!profile) return null;
 

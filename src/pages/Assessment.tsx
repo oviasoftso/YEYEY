@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Send, CheckCircle, XCircle, ArrowRight, ArrowLeft, Loader2, FileText, ListChecks, Table2, Shuffle, ChevronLeft, ChevronRight, AlertTriangle, Clock } from "lucide-react";
 import LatexText from "@/components/LatexText";
+import OviVoice from "@/components/OviVoice";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +20,10 @@ import { StudentProfile, Assessment, AssessmentQuestion } from "@/lib/types";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import AccountingTable, { isAccountingTableQuestion, detectTableType } from "@/components/AccountingTable";
+import MathGraph from "@/components/MathGraph";
+import BearingTool from "@/components/BearingTool";
+import ConstructionTool from "@/components/ConstructionTool";
+import VoiceInput from "@/components/VoiceInput";
 
 type Phase = "select" | "answering" | "submitting" | "results";
 type PaperType = "paper1" | "paper2";
@@ -38,13 +43,52 @@ const normalizePaper2Questions = (value: unknown): string[] => (
     : []
 );
 
-const normalizeMcqQuestions = (value: unknown): MCQQuestion[] => (
-  Array.isArray(value)
-    ? value.filter((q): q is MCQQuestion => Boolean(
-        q?.question && q?.options?.A && q?.options?.B && q?.options?.C && q?.options?.D && q?.correctAnswer,
-      ))
-    : []
-);
+const normalizeMcqQuestions = (value: unknown): MCQQuestion[] => {
+  if (!Array.isArray(value)) return [];
+  const letters = ["A", "B", "C", "D"] as const;
+  return value
+    .map((q: any) => {
+      if (!q?.question) return null;
+      // Handle options as object (uppercase or lowercase keys)
+      let opts: Record<string, string> | null = null;
+      if (q.options && typeof q.options === "object" && !Array.isArray(q.options)) {
+        const keys = Object.keys(q.options);
+        const hasUpper = keys.some((k) => letters.includes(k as typeof letters[number]));
+        if (hasUpper) {
+          opts = q.options as Record<string, string>;
+        } else {
+          // lowercase keys → normalize to uppercase
+          const mapped: Record<string, string> = {};
+          for (const l of letters) {
+            const val = q.options[l.toLowerCase()];
+            if (val) mapped[l] = String(val);
+          }
+          if (Object.keys(mapped).length === 4) opts = mapped;
+        }
+      }
+      // Handle choices/options as array ["A text", "B text", ...] or ["opt1", "opt2", ...]
+      if (!opts) {
+        const arr = q.choices || (Array.isArray(q.options) ? q.options : null);
+        if (Array.isArray(arr) && arr.length >= 4) {
+          opts = {};
+          for (let i = 0; i < 4; i++) opts[letters[i]] = String(arr[i]);
+        }
+      }
+      if (!opts) return null;
+      // Validate all 4 options exist
+      for (const l of letters) {
+        if (!opts[l] || String(opts[l]).trim().length === 0) return null;
+      }
+      const ans = String(q.correctAnswer || q.answer || q.correct || "").toUpperCase().trim();
+      if (!letters.includes(ans as typeof letters[number])) return null;
+      return {
+        question: String(q.question),
+        options: { A: opts.A, B: opts.B, C: opts.C, D: opts.D },
+        correctAnswer: ans,
+      } as MCQQuestion;
+    })
+    .filter((q): q is MCQQuestion => q !== null);
+};
 
 const AssessmentPage = () => {
   const navigate = useNavigate();
@@ -140,10 +184,21 @@ const AssessmentPage = () => {
     }
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-assessment", {
-        body: { subject: selectedSubject, topic: selectedTopic, paperType },
-      });
-      if (error) throw error;
+      // Try OVI ARENA generator first (command word support), fall back to generate-assessment
+      let data: any;
+      try {
+        const arenaResult = await supabase.functions.invoke("ovi_arena_generator", {
+          body: { subject: selectedSubject, topic: selectedTopic, paperType, questionCount: paperType === "paper1" ? 20 : 8 },
+        });
+        if (arenaResult.error) throw arenaResult.error;
+        data = arenaResult.data;
+      } catch {
+        const fallback = await supabase.functions.invoke("generate-assessment", {
+          body: { subject: selectedSubject, topic: selectedTopic, paperType },
+        });
+        if (fallback.error) throw fallback.error;
+        data = fallback.data;
+      }
 
       if (paperType === "paper1") {
         const nextQuestions = normalizeMcqQuestions(data?.questions);
@@ -204,7 +259,18 @@ const AssessmentPage = () => {
         ? { subject: selectedSubject, topic: selectedTopic, questions: mcqQuestions, answers: mcqAnswers, paperType }
         : { subject: selectedSubject, topic: selectedTopic, questions, answers, paperType };
 
-      const { data, error } = await supabase.functions.invoke("mark-assessment", { body });
+      // Try OVI ARENA grader first (better feedback), fall back to mark-assessment
+      let data, error;
+      try {
+        const arenaResult = await supabase.functions.invoke("ovi_arena_grader", { body });
+        if (arenaResult.error) throw arenaResult.error;
+        data = arenaResult.data;
+        error = null;
+      } catch {
+        const fallback = await supabase.functions.invoke("mark-assessment", { body });
+        data = fallback.data;
+        error = fallback.error;
+      }
       if (error) throw error;
 
       const assessment: Assessment = {
@@ -224,10 +290,34 @@ const AssessmentPage = () => {
       const correctCount = assessment.questions.filter((q) => q.marksAwarded >= q.marksAllocated * 0.5).length;
       await store.batchUpdateMastery(selectedSubject, selectedTopic, assessment.questions.length, correctCount);
 
-      // Create flashcards from questions the student got wrong
+      // Award XP
+      const xpResult = store.addXP(20, "assessment");
+      if (assessment.percentage === 100) {
+        store.addXP(30, "perfect_score_bonus");
+        toast({ title: "Perfect Score!", description: "+50 XP (20 base + 30 bonus)!" });
+      }
+      if (xpResult.levelUp) {
+        toast({ title: "Level Up!", description: `You reached Level ${xpResult.xpData.level}!` });
+      }
+
+      // Save wrong answers to Mistake Journal
       const wrongQuestions = assessment.questions.filter(
         (q) => q.marksAwarded < q.marksAllocated * 0.5
       );
+      for (const q of wrongQuestions) {
+        store.addMistake({
+          subject: selectedSubject,
+          topic: selectedTopic || q.topic || "General",
+          question: q.question,
+          studentAnswer: q.studentAnswer || "Not answered",
+          correctAnswer: q.correctAnswer || "",
+          explanation: q.explanation || "",
+          improvementAdvice: q.improvementAdvice || "",
+          assessmentId: assessment.id,
+        });
+      }
+
+      // Create flashcards from questions the student got wrong
       if (wrongQuestions.length > 0) {
         const existingCards = store.getFlashcards();
         let created = 0;
@@ -252,7 +342,7 @@ const AssessmentPage = () => {
         }
         if (created > 0) {
           toast({ 
-            title: "🧠 Flashcards Created!", 
+            title: "Flashcards Created", 
             description: `${created} flashcards from questions you got wrong.` 
           });
         }
@@ -272,15 +362,25 @@ const AssessmentPage = () => {
     setPhase("submitting");
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mark-assessment", {
-        body: {
-          subject: "Mixed Assessment",
-          topic: "Multiple Subjects",
-          questions: mixedQuestions.map(q => q.question),
-          answers: mixedAnswers,
-          paperType: "paper2",
-        },
-      });
+      const mixedBody = {
+        subject: "Mixed Assessment",
+        topic: "Multiple Subjects",
+        questions: mixedQuestions.map(q => q.question),
+        answers: mixedAnswers,
+        paperType: "paper2",
+      };
+
+      let data, error;
+      try {
+        const arenaResult = await supabase.functions.invoke("ovi_arena_grader", { body: mixedBody });
+        if (arenaResult.error) throw arenaResult.error;
+        data = arenaResult.data;
+        error = null;
+      } catch {
+        const fallback = await supabase.functions.invoke("mark-assessment", { body: mixedBody });
+        data = fallback.data;
+        error = fallback.error;
+      }
       if (error) throw error;
 
       const assessment: Assessment = {
@@ -298,10 +398,29 @@ const AssessmentPage = () => {
 
       await store.addAssessment(assessment);
 
-      // Create flashcards from wrong answers
+      // Award XP
+      const xpResult = store.addXP(20, "assessment");
+      if (assessment.percentage === 100) store.addXP(30, "perfect_score_bonus");
+      if (xpResult.levelUp) toast({ title: "Level Up!", description: `You reached Level ${xpResult.xpData.level}!` });
+
+      // Save wrong answers to Mistake Journal
       const wrongQs = assessment.questions.filter(
         (q) => q.marksAwarded < q.marksAllocated * 0.5
       );
+      for (const q of wrongQs) {
+        store.addMistake({
+          subject: q.subject || "Mixed",
+          topic: q.topic || "General",
+          question: q.question,
+          studentAnswer: q.studentAnswer || "Not answered",
+          correctAnswer: q.correctAnswer || "",
+          explanation: q.explanation || "",
+          improvementAdvice: q.improvementAdvice || "",
+          assessmentId: assessment.id,
+        });
+      }
+
+      // Create flashcards from wrong answers
       if (wrongQs.length > 0) {
         const existingCards = store.getFlashcards();
         let created = 0;
@@ -325,7 +444,7 @@ const AssessmentPage = () => {
           }
         }
         if (created > 0) {
-          toast({ title: "🧠 Flashcards Created!", description: `${created} flashcards from questions you got wrong.` });
+          toast({ title: "Flashcards Created", description: `${created} flashcards from questions you got wrong.` });
         }
       }
 
@@ -672,38 +791,47 @@ const AssessmentPage = () => {
               ))}
             </div>
 
-            <Card className={mcqAnswers[currentQuestion] ? "border-primary/30" : ""}>
+            <Card className={`transition-all duration-300 ${mcqAnswers[currentQuestion] ? "border-primary/40 shadow-lg shadow-primary/5" : "hover:shadow-md"}`}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Question {currentQuestion + 1}</CardTitle>
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span>Question {currentQuestion + 1} <span className="text-muted-foreground font-normal">of {mcqQuestions.length}</span></span>
+                  {mcqAnswers[currentQuestion] && <Badge variant="secondary" className="text-xs animate-float-in">Answered</Badge>}
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <LatexText>{q.question}</LatexText>
-                <div className="grid gap-2">
-                  {(["A", "B", "C", "D"] as const).map((letter) => (
-                    <button
-                      key={letter}
-                      type="button"
-                      onClick={() => {
-                        const copy = [...mcqAnswers];
-                        copy[currentQuestion] = letter;
-                        setMcqAnswers(copy);
-                      }}
-                      className={`flex items-center gap-3 p-3 rounded-lg border-2 text-left transition-all ${
-                        mcqAnswers[currentQuestion] === letter
-                          ? "border-primary bg-primary/10 text-foreground"
-                          : "border-border bg-card text-foreground hover:border-primary/30"
-                      }`}
-                    >
-                      <span className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold shrink-0 ${
-                        mcqAnswers[currentQuestion] === letter
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground"
-                      }`}>
-                        {letter}
-                      </span>
-                      <span className="text-sm"><LatexText>{q.options[letter]}</LatexText></span>
-                    </button>
-                  ))}
+              <CardContent className="space-y-4">
+                <div className="text-base leading-relaxed"><LatexText>{q.question}</LatexText></div>
+                <div className="grid gap-2.5">
+                  {(["A", "B", "C", "D"] as const).map((letter, idx) => {
+                    const selected = mcqAnswers[currentQuestion] === letter;
+                    return (
+                      <button
+                        key={letter}
+                        type="button"
+                        onClick={() => {
+                          const copy = [...mcqAnswers];
+                          copy[currentQuestion] = letter;
+                          setMcqAnswers(copy);
+                        }}
+                        className={`flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all duration-200 animate-float-in ${
+                          selected
+                            ? "border-primary bg-primary/5 shadow-md shadow-primary/10 scale-[1.01]"
+                            : "border-border/60 bg-card hover:border-primary/25 hover:bg-primary/[0.02] hover:shadow-sm"
+                        }`}
+                        style={{ animationDelay: `${idx * 50}ms` }}
+                      >
+                        <span className={`flex items-center justify-center w-9 h-9 rounded-full text-sm font-bold shrink-0 transition-all duration-200 ${
+                          selected
+                            ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                            : "bg-muted/70 text-muted-foreground"
+                        }`}>
+                          {letter}
+                        </span>
+                        <span className={`text-sm leading-relaxed ${selected ? "text-foreground font-medium" : "text-foreground/80"}`}>
+                          <LatexText>{q.options[letter]}</LatexText>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -788,9 +916,44 @@ const AssessmentPage = () => {
               </CardHeader>
               <CardContent className="space-y-3">
                 <LatexText>{displayQ}</LatexText>
+
+                {/* Math graph tools for geometry/bearing/construction questions */}
+                {(() => {
+                  const q = displayQ.toLowerCase();
+                  const isBearing = q.includes("bearing") || q.includes("compass") || q.includes("navigation");
+                  const isConstruction = q.includes("construct") || q.includes("bisector") || q.includes("perpendicular");
+                  const isGraph = q.includes("plot") || q.includes("graph") || q.includes("coordinate") || q.includes("transformation") || q.includes("reflect") || q.includes("rotate");
+
+                  if (isBearing) {
+                    return (
+                      <div className="border border-border rounded-xl p-3 bg-muted/30">
+                        <p className="text-xs text-muted-foreground mb-2">Bearing Diagram (click to interact)</p>
+                        <BearingTool width={280} height={280} title="" />
+                      </div>
+                    );
+                  }
+                  if (isConstruction) {
+                    return (
+                      <div className="border border-border rounded-xl p-3 bg-muted/30">
+                        <p className="text-xs text-muted-foreground mb-2">Construction Grid</p>
+                        <ConstructionTool width={350} height={350} title="" />
+                      </div>
+                    );
+                  }
+                  if (isGraph) {
+                    return (
+                      <div className="border border-border rounded-xl p-3 bg-muted/30">
+                        <p className="text-xs text-muted-foreground mb-2">Coordinate Grid (click to plot points)</p>
+                        <MathGraph width={350} height={350} interactive title="" />
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
                 {isAccounting && tableType ? (
                   <div className="border border-border rounded-xl p-3 bg-muted/30">
-                    <p className="text-xs text-muted-foreground mb-2">📊 Fill in the accounting table below:</p>
+                    <p className="text-xs text-muted-foreground mb-2">Fill in the accounting table below:</p>
                     <AccountingTable
                       tableType={tableType}
                       onChange={(val) => {
@@ -939,10 +1102,10 @@ const AssessmentPage = () => {
           const pct = results.percentage;
           const oviMood: OviMood = pct >= 80 ? "celebrating" : pct >= 50 ? "encouraging" : "explaining";
           const oviMsg = pct >= 80
-            ? "Amazing work! You're a star! 🌟"
+            ? "Outstanding performance. You've mastered this material."
             : pct >= 50
-              ? "Good effort! Let's keep improving 💪"
-              : "Don't worry, we'll get there together! 📚";
+              ? "Solid effort. Focus on the areas below to push your score higher."
+              : "This topic needs more work. Review the explanations below and try again.";
 
           return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
@@ -959,19 +1122,33 @@ const AssessmentPage = () => {
               </div>
             </div>
 
-            <Card className={`border ${pct >= 80 ? "bg-success/5 border-success/20" : pct >= 50 ? "bg-primary/5 border-primary/20" : "bg-warning/5 border-warning/20"}`}>
-              <CardContent className="p-6 text-center">
-                <div className={`text-4xl font-display font-bold mb-2 ${pct >= 80 ? "text-success" : pct >= 50 ? "text-primary" : "text-warning"}`}>{pct}%</div>
-                <div className="text-muted-foreground">{results.totalScore} / {results.maxScore} marks</div>
-                <Progress value={pct} className="mt-4 h-3" />
+            <Card className={`border-2 overflow-hidden ${pct >= 80 ? "border-success/30 bg-success/5" : pct >= 50 ? "border-primary/30 bg-primary/5" : "border-warning/30 bg-warning/5"}`}>
+              <CardContent className="p-8 text-center">
+                <motion.div
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                  className={`text-6xl font-display font-bold mb-3 ${pct >= 80 ? "text-success" : pct >= 50 ? "text-primary" : "text-warning"}`}
+                >
+                  {pct}%
+                </motion.div>
+                <div className="text-muted-foreground text-lg">{results.totalScore} / {results.maxScore} marks</div>
+                <div className="mt-4 max-w-xs mx-auto">
+                  <Progress value={pct} className="h-3" />
+                </div>
                 {pct >= 80 && (
-                  <motion.p
-                    className="mt-3 text-success font-semibold"
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.3 }}
-                  >
-                    🎉 Outstanding Performance!
+                  <motion.p className="mt-4 text-success font-semibold text-lg" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+                    Outstanding Performance!
+                  </motion.p>
+                )}
+                {pct >= 50 && pct < 80 && (
+                  <motion.p className="mt-4 text-primary font-semibold" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+                    Good effort — keep pushing higher!
+                  </motion.p>
+                )}
+                {pct < 50 && (
+                  <motion.p className="mt-4 text-warning font-semibold" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+                    Keep studying — you'll get there!
                   </motion.p>
                 )}
               </CardContent>
@@ -983,7 +1160,8 @@ const AssessmentPage = () => {
               {results.questions.map((q, i) => {
                 const passed = q.marksAwarded >= q.marksAllocated * 0.5;
                 return (
-                  <Card key={i} className={passed ? "border-success/20" : "border-destructive/20"}>
+                  <Card key={i} className={`overflow-hidden border ${passed ? "border-success/20" : "border-destructive/20"} hover:shadow-md transition-shadow`}>
+                    <div className={`h-1 ${passed ? "bg-success/40" : "bg-destructive/40"}`} />
                     <CardHeader className="pb-2">
                       <CardTitle className="flex items-center gap-2 text-base">
                         {passed
@@ -1007,20 +1185,26 @@ const AssessmentPage = () => {
                             {q.studentAnswer === "Not answered" || !q.studentAnswer ? <p>Not answered</p> : <LatexText>{q.studentAnswer}</LatexText>}
                           </div>
                         </div>
-                        <div className="bg-success/5 rounded-lg p-3">
+                        <div className="bg-success/5 border border-success/10 rounded-lg p-3">
                           <strong className="text-xs uppercase tracking-wide text-success">Correct Answer:</strong>
                           <LatexText className="mt-1">{q.correctAnswer}</LatexText>
                         </div>
                       </div>
                       {q.explanation && (
-                        <div className="bg-muted/50 rounded-lg p-3">
-                          <strong className="text-foreground text-xs uppercase tracking-wide">📖 Explanation:</strong>
+                        <div className="bg-muted/50 rounded-lg p-3 relative">
+                          <div className="flex items-center justify-between">
+                            <strong className="text-foreground text-xs uppercase tracking-wide">Explanation:</strong>
+                            <OviVoice text={q.explanation.replace(/[#*_`~\[\]]/g, "").slice(0, 2000)} size="sm" />
+                          </div>
                           <LatexText className="mt-1">{q.explanation}</LatexText>
                         </div>
                       )}
                       {q.improvementAdvice && (
-                        <div className="bg-primary/5 rounded-lg p-3">
-                          <strong className="text-primary text-xs uppercase tracking-wide">💡 Improvement Tip:</strong>
+                        <div className="bg-primary/5 border border-primary/10 rounded-lg p-3 relative">
+                          <div className="flex items-center justify-between">
+                            <strong className="text-primary text-xs uppercase tracking-wide">Improvement Tip:</strong>
+                            <OviVoice text={q.improvementAdvice.replace(/[#*_`~\[\]]/g, "").slice(0, 2000)} size="sm" />
+                          </div>
                           <LatexText className="mt-1">{q.improvementAdvice}</LatexText>
                         </div>
                       )}
@@ -1033,7 +1217,7 @@ const AssessmentPage = () => {
             <div className="grid sm:grid-cols-2 gap-4">
               {results.strongConcepts.length > 0 && (
                 <Card className="border-success/20">
-                  <CardHeader><CardTitle className="text-success text-base">💪 Strong Concepts</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="text-success text-base">Strong Concepts</CardTitle></CardHeader>
                   <CardContent>
                     <ul className="space-y-1 text-sm text-foreground">
                       {results.strongConcepts.map((c, i) => <li key={i}>• {c}</li>)}
@@ -1043,7 +1227,7 @@ const AssessmentPage = () => {
               )}
               {results.weakConcepts.length > 0 && (
                 <Card className="border-destructive/20">
-                  <CardHeader><CardTitle className="text-destructive text-base">📖 Needs Improvement</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="text-destructive text-base">Needs Improvement</CardTitle></CardHeader>
                   <CardContent>
                     <ul className="space-y-1 text-sm text-foreground">
                       {results.weakConcepts.map((c, i) => <li key={i}>• {c}</li>)}

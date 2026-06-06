@@ -1,7 +1,7 @@
 /**
- * Multi-provider AI gateway with 5-tier fallback.
+ * Multi-provider AI gateway with zero-cost-first fallback.
  *
- * Order: Gemini → OpenAI → Anthropic → Groq → OpenRouter.
+ * Order: Pollinations (free, no key) → UncloseAI (free, no key) → Gemini → Groq → OpenRouter.
  * All providers are accessed via OpenAI-compatible chat-completions endpoints.
  *
  * Public surface:
@@ -52,19 +52,27 @@ interface ProviderConfig {
 }
 
 const PROVIDERS: ProviderConfig[] = [
+  // ── Zero-cost providers (no API key required) ──
+  {
+    name: "pollinations",
+    envKey: "", // No key needed — free, unlimited
+    url: "https://text.pollinations.ai/openai/chat/completions",
+    model: "openai-fast",
+    authHeader: () => ({}),
+  },
+  {
+    name: "uncloseai",
+    envKey: "", // No key needed — free, unlimited
+    url: "https://hermes.ai.unturf.com/v1/chat/completions",
+    model: "adamo1139/Hermes-3-Llama-3.1-8B-FP8-Dynamic",
+    authHeader: () => ({}),
+  },
+  // ── Free-tier providers (API key required but free tier available) ──
   {
     name: "gemini",
     envKey: "GEMINI_API_KEY",
-    // Google's OpenAI-compatible endpoint
     url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-    model: "gemini-2.5-flash",
-    authHeader: (k) => ({ Authorization: `Bearer ${k}` }),
-  },
-  {
-    name: "openai",
-    envKey: "OPENAI_API_KEY",
-    url: "https://api.openai.com/v1/chat/completions",
-    model: "gpt-4o-mini",
+    model: "gemini-2.0-flash",
     authHeader: (k) => ({ Authorization: `Bearer ${k}` }),
   },
   {
@@ -74,22 +82,12 @@ const PROVIDERS: ProviderConfig[] = [
     model: "llama-3.3-70b-versatile",
     authHeader: (k) => ({ Authorization: `Bearer ${k}` }),
   },
-  {
-    name: "anthropic",
-    envKey: "ANTHROPIC_API_KEY",
-    url: "https://api.anthropic.com/v1/messages",
-    model: "claude-3-5-haiku-latest",
-    kind: "anthropic",
-    authHeader: (k) => ({
-      "x-api-key": k,
-      "anthropic-version": "2023-06-01",
-    }),
-  },
+  // ── Paid providers (fallback) ──
   {
     name: "openrouter",
     envKey: "OPENROUTER_API_KEY",
     url: "https://openrouter.ai/api/v1/chat/completions",
-    model: "google/gemini-2.5-flash",
+    model: "google/gemini-2.0-flash",
     authHeader: (k) => ({
       Authorization: `Bearer ${k}`,
       "HTTP-Referer": "https://oviaprep.app",
@@ -213,8 +211,9 @@ export async function aiComplete(
       errors.push(`${p.name}: skipped (cooldown)`);
       continue;
     }
-    const key = Deno.env.get(p.envKey);
-    if (!key) {
+    // Free providers with no envKey don't need a key
+    const key = p.envKey ? Deno.env.get(p.envKey) : "";
+    if (p.envKey && !key) {
       errors.push(`${p.name}: no key`);
       continue;
     }

@@ -1,0 +1,39 @@
+{
+  "name": "OVIA Prep — Waterfalls Academy",
+  "short_name": "OVIA Prep",
+  "description": "Zimbabwe's #1 AI-powered O-Level revision platform. ZIMSEC-aligned, mastery-driven, accessible offline.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#2d6a4f",
+  "orientation": "any",
+  "scope": "/",
+  "lang": "en",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Flashcards",
+      "url": "/flashcards",
+      "description": "Review your spaced repetition flashcards"
+    },
+    {
+      "name": "Chat with OVI",
+      "url": "/chat",
+      "description": "Ask your AI tutor anything"
+    },
+    {
+      "name": "Take Assessment",
+      "url": "/assessment",
+      "description": "Test your knowledge"
+    }
+  ]
+}
