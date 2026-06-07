@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════
 // OVIA Prep — Service Worker (Basic for offline support)
-// Simple service worker that only caches the app shell
-// ═══════════════════════════════════════════════════════════
-
 const CACHE_NAME = "ovi-prep-v2";
 
 // Install: cache app shell
@@ -28,21 +24,23 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Fetch: simple cache-first for everything
+// Fetch: serve from cache, fall back to network for navigation requests
 self.addEventListener("fetch", (event) => {
+  // Only handle GET requests
+  if (event.request.method !== "GET") return;
+
+  // For navigation requests (HTML pages), try network first, fallback to cache
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match("/index.html"))
+    );
+    return;
+  }
+
+  // For all other requests, try cache first, then network
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        // Don't cache the JS/CSS files - always fetch fresh
-        if (event.request.url.endsWith(".js") || event.request.url.endsWith(".css")) {
-          return response;
-        }
-        // Cache other requests
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        return response;
-      });
+      return cached || fetch(event.request);
     })
   );
 });
