@@ -166,4 +166,33 @@
   .animate-float-in {
     animation: float-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
+
+  /* Mobile safe area for notched phones */
+  .safe-area-inset {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* Mobile touch targets — minimum 44px */
+@media (max-width: 1023px) {
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  /* Override for small inline elements */
+  .badge, [class*="text-[10px]"], [class*="text-[9px]"] {
+    min-height: auto;
+    min-width: auto;
+  }
+}
+
+/* Smooth scrolling on mobile */
+@media (max-width: 1023px) {
+  html {
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Prevent horizontal overflow */
+  body {
+    overflow-x: hidden;
+  }
 }

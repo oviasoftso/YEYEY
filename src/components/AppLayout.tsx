@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, BookOpen, Brain, StickyNote, MessageCircle,
   BarChart3, CalendarCheck, Clock, Sun, Moon, Monitor, LogOut, Library, Shield, GraduationCap, FileText,
-  WifiOff, Volume2, BookX, ClipboardList, Users2, Users,
+  WifiOff, Volume2, BookX, ClipboardList, Users2, Users, MoreHorizontal, X,
 } from "lucide-react";
 import OviAvatar from "./OviAvatar";
 import waterfallsLogo from "@/assets/waterfalls-logo.png";
@@ -84,10 +84,14 @@ const MobileThemeToggle = () => {
   );
 };
 
+const mobileNavItems = baseNavItems.slice(0, 4); // Dashboard, PULSE, COMPASS, ARENA
+const moreNavItems = baseNavItems.slice(4); // Everything else
+
 const AppLayout = ({ children }: AppLayoutProps) => {
   const location = useLocation();
   const [isAdmin, setIsAdmin] = useState(false);
   const [isTeacher, setIsTeacher] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Role check — admin bypass or Supabase user_roles table
   useEffect(() => {
@@ -223,25 +227,102 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           <MobileThemeToggle />
         </header>
 
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto pb-16">{children}</main>
 
-        <nav className="lg:hidden flex items-center justify-around border-t border-border bg-card py-2">
-          {baseNavItems.slice(0, 5).map(({ path, label, icon: Icon }) => {
+        {/* Mobile bottom nav — 4 main tabs + More */}
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around border-t border-border bg-card/95 backdrop-blur-sm py-1.5 safe-area-inset">
+          {mobileNavItems.map(({ path, label, icon: Icon }) => {
             const active = location.pathname === path;
             return (
               <Link
                 key={path}
                 to={path}
-                className={`flex flex-col items-center gap-0.5 text-[10px] font-semibold ${
-                  active ? "text-primary" : "text-muted-foreground"
+                className={`flex flex-col items-center gap-0.5 px-2 py-1 min-w-[56px] rounded-lg transition-colors ${
+                  active ? "text-primary" : "text-muted-foreground active:bg-muted"
                 }`}
               >
-                <Icon size={20} strokeWidth={1.5} />
-                <span>{label.split(" ")[0]}</span>
+                <Icon size={20} strokeWidth={active ? 2 : 1.5} />
+                <span className="text-[10px] font-semibold leading-tight">{label.split(" ")[0]}</span>
               </Link>
             );
           })}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className={`flex flex-col items-center gap-0.5 px-2 py-1 min-w-[56px] rounded-lg transition-colors ${
+              mobileMenuOpen ? "text-primary" : "text-muted-foreground active:bg-muted"
+            }`}
+          >
+            {mobileMenuOpen ? <X size={20} strokeWidth={2} /> : <MoreHorizontal size={20} strokeWidth={1.5} />}
+            <span className="text-[10px] font-semibold leading-tight">More</span>
+          </button>
         </nav>
+
+        {/* Mobile More menu overlay */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden fixed inset-0 z-30" onClick={() => setMobileMenuOpen(false)}>
+            <div className="absolute inset-0 bg-black/20" />
+            <div
+              className="absolute bottom-16 left-2 right-2 bg-card rounded-xl border border-border shadow-xl p-2 grid grid-cols-3 gap-1"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {moreNavItems.map(({ path, label, icon: Icon }) => {
+                const active = location.pathname === path;
+                return (
+                  <Link
+                    key={path}
+                    to={path}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-lg text-center transition-colors ${
+                      active ? "bg-primary/10 text-primary" : "text-muted-foreground active:bg-muted"
+                    }`}
+                  >
+                    <Icon size={20} strokeWidth={1.5} />
+                    <span className="text-[11px] font-semibold leading-tight">{label}</span>
+                  </Link>
+                );
+              })}
+              {(isAdmin || isTeacher) && (
+                <>
+                  {isTeacher && (
+                    <Link
+                      to="/teacher"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`flex flex-col items-center gap-1.5 p-3 rounded-lg text-center transition-colors ${
+                        location.pathname === "/teacher" ? "bg-primary/10 text-primary" : "text-muted-foreground active:bg-muted"
+                      }`}
+                    >
+                      <GraduationCap size={20} strokeWidth={1.5} />
+                      <span className="text-[11px] font-semibold leading-tight">Classroom</span>
+                    </Link>
+                  )}
+                  {isAdmin && (
+                    <Link
+                      to="/admin"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`flex flex-col items-center gap-1.5 p-3 rounded-lg text-center transition-colors ${
+                        location.pathname === "/admin" ? "bg-primary/10 text-primary" : "text-muted-foreground active:bg-muted"
+                      }`}
+                    >
+                      <Shield size={20} strokeWidth={1.5} />
+                      <span className="text-[11px] font-semibold leading-tight">Director</span>
+                    </Link>
+                  )}
+                </>
+              )}
+              <button
+                onClick={async () => {
+                  store.clearLocal();
+                  await supabase.auth.signOut();
+                  window.location.href = "/";
+                }}
+                className="flex flex-col items-center gap-1.5 p-3 rounded-lg text-center text-destructive active:bg-destructive/10"
+              >
+                <LogOut size={20} strokeWidth={1.5} />
+                <span className="text-[11px] font-semibold leading-tight">Sign Out</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
