@@ -17,7 +17,6 @@ import type { OviMood } from "@/components/OviAvatar";
 import { store } from "@/lib/store";
 import { SUBJECT_TOPICS, SUBJECT_ICONS, SUBJECTS_WITH_PAPER1, getAssessmentTime, getQuestionTime } from "@/lib/constants";
 import { StudentProfile, Assessment, AssessmentQuestion } from "@/lib/types";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import AccountingTable, { isAccountingTableQuestion, detectTableType } from "@/components/AccountingTable";
 import MathGraph from "@/components/MathGraph";
@@ -195,18 +194,11 @@ export const normalizeMcqQuestions = (value: unknown): MCQQuestion[] => {
       // Try OVI ARENA generator first (command word support), fall back to generate-assessment
       let data: any;
       try {
-        const arenaResult = await supabase.functions.invoke("ovi_arena_generator", {
-          body: { subject: selectedSubject, topic: selectedTopic, paperType, questionCount: paperType === "paper1" ? 20 : 8 },
-        });
-        if (arenaResult.error) throw arenaResult.error;
-        data = arenaResult.data;
-      } catch {
-        const fallback = await supabase.functions.invoke("generate-assessment", {
-          body: { subject: selectedSubject, topic: selectedTopic, paperType },
-        });
-        if (fallback.error) throw fallback.error;
-        data = fallback.data;
-      }
+        // Mock data for MCQ questions
+        data = {
+          questions: paperType === "paper1" ? mockMcqQuestions(selectedSubject, selectedTopic) : mockPaper2Questions(selectedSubject, selectedTopic)
+        };
+        toast({ title: "Mock Questions Generated", description: "Using mock data for testing", variant: "default" });
 
       if (paperType === "paper1") {
         const nextQuestions = normalizeMcqQuestions(data?.questions);
@@ -267,19 +259,16 @@ export const normalizeMcqQuestions = (value: unknown): MCQQuestion[] => {
         ? { subject: selectedSubject, topic: selectedTopic, questions: mcqQuestions, answers: mcqAnswers, paperType }
         : { subject: selectedSubject, topic: selectedTopic, questions, answers, paperType };
 
-      // Try OVI ARENA grader first (better feedback), fall back to mark-assessment
-      let data, error;
-      try {
-        const arenaResult = await supabase.functions.invoke("ovi_arena_grader", { body });
-        if (arenaResult.error) throw arenaResult.error;
-        data = arenaResult.data;
-        error = null;
-      } catch {
-        const fallback = await supabase.functions.invoke("mark-assessment", { body });
-        data = fallback.data;
-        error = fallback.error;
-      }
-      if (error) throw error;
+      // Mock grading results for testing
+      data = {
+        results: mockAssessmentResults(mcqQuestions, mcqAnswers, paperType),
+        totalScore: paperType === "paper1" ? 5 : 25,
+        maxScore: paperType === "paper1" ? 10 : 50,
+        percentage: paperType === "paper1" ? 50 : 50,
+        strongConcepts: ["Mock Concept 1", "Mock Concept 2"],
+        weakConcepts: ["Mock Weak Area"]
+      };
+      toast({ title: "Mock Grading Complete", description: "Using mock results for testing", variant: "default" });
 
       const assessment: Assessment = {
         id: crypto.randomUUID(),
@@ -378,18 +367,16 @@ export const normalizeMcqQuestions = (value: unknown): MCQQuestion[] => {
         paperType: "paper2",
       };
 
-      let data, error;
-      try {
-        const arenaResult = await supabase.functions.invoke("ovi_arena_grader", { body: mixedBody });
-        if (arenaResult.error) throw arenaResult.error;
-        data = arenaResult.data;
-        error = null;
-      } catch {
-        const fallback = await supabase.functions.invoke("mark-assessment", { body: mixedBody });
-        data = fallback.data;
-        error = fallback.error;
-      }
-      if (error) throw error;
+      // Mock grading results for mixed assessment
+      data = {
+        results: mockMixedAssessmentResults(mixedQuestions, mixedAnswers),
+        totalScore: mixedSubjects.length * 2,
+        maxScore: mixedSubjects.length * 4,
+        percentage: 50, // 50% for testing
+        strongConcepts: ["Mock Mixed Concept 1"],
+        weakConcepts: ["Mock Mixed Weak Area"]
+      };
+      toast({ title: "Mock Grading Complete", description: "Using mock results for mixed assessment", variant: "default" });
 
       const assessment: Assessment = {
         id: crypto.randomUUID(),
@@ -1258,6 +1245,69 @@ export const normalizeMcqQuestions = (value: unknown): MCQQuestion[] => {
       </div>
     </AppLayout>
   );
+};
+
+const mockMcqQuestions = (subject: string, topic: string) => {
+  // Mock MCQ questions for testing
+  return [
+    {
+      question: `What is the capital of ${subject}?`,
+      options: {
+        A: "Option A",
+        B: "Option B",
+        C: "Option C",
+        D: "Option D"
+      },
+      correctAnswer: "A",
+      explanation: `The capital of ${subject} is typically Option A for testing purposes.`
+    },
+    {
+      question: `What is the topic of ${topic}?`,
+      options: {
+        A: "Option A",
+        B: "Option B",
+        C: "Option C",
+        D: "Option D"
+      },
+      correctAnswer: "B",
+      explanation: `The topic of ${topic} is typically Option B for testing purposes.`
+    }
+  ];
+};
+
+const mockPaper2Questions = (subject: string, topic: string) => {
+  // Mock Paper 2 questions for testing
+  return [
+    `What is the topic of ${topic} in ${subject}?`,
+    `How does ${subject} relate to ${topic}?`,
+    `What are the key concepts in ${topic} for ${subject}?`,
+    `Explain the relationship between ${subject} and ${topic}.`,
+    `What are the main points to remember about ${topic} in ${subject}?`
+  ];
+};
+
+const mockAssessmentResults = (questions: MCQQuestion[], answers: string[], paperType: PaperType): AssessmentQuestion[] => {
+  return questions.map((q, i) => ({
+    question: q.question,
+    studentAnswer: answers[i] || "Not answered",
+    correctAnswer: q.options[q.correctAnswer],
+    marksAwarded: answers[i] === q.correctAnswer ? (paperType === "paper1" ? 1 : 5) : 0,
+    marksAllocated: paperType === "paper1" ? 1 : 5,
+    explanation: `This is a mock explanation for ${q.question}`,
+    improvementAdvice: `Review ${q.question} to improve your understanding.`
+  }));
+};
+
+const mockMixedAssessmentResults = (questions: { subject: string; topic: string; question: string }[], answers: string[]): AssessmentQuestion[] => {
+  return questions.map((q, i) => ({
+    question: q.question,
+    studentAnswer: answers[i] || "Not answered",
+    correctAnswer: "This is a mock correct answer",
+    marksAwarded: answers[i] ? 2 : 0,
+    marksAllocated: 4,
+    explanation: `This is a mock explanation for ${q.question}`,
+    improvementAdvice: `Review ${q.question} to improve your understanding.`
+  }));
 };
 
 export default AssessmentPage;
