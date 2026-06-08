@@ -43,54 +43,60 @@ const normalizePaper2Questions = (value: unknown): string[] => (
     : []
 );
 
-const normalizeMcqQuestions = (value: unknown): MCQQuestion[] => {
+export const normalizeMcqQuestions = (value: unknown): MCQQuestion[] => {
   if (!Array.isArray(value)) return [];
   const letters = ["A", "B", "C", "D"] as const;
+
+  const mapOptions = (opts: any): Record<string,string> | null => {
+    if (!opts || typeof opts !== "object" || Array.isArray(opts)) return null;
+    const hasUpper = Object.keys(opts).some(k => letters.includes(k as typeof letters[number]));
+    if (hasUpper) {
+      // Assume correct shape
+      return { A: String(opts.A), B: String(opts.B), C: String(opts.C), D: String(opts.D) };
+    }
+    // Lowercase keys
+    const mapped: Record<string,string> = {};
+    for (const l of letters) {
+      const val = opts[l.toLowerCase()];
+      if (val) mapped[l] = String(val);
+    }
+    return Object.keys(mapped).length === 4 ? mapped : null;
+  };
+
+  const mapChoices = (choices: any): Record<string,string> | null => {
+    if (!Array.isArray(choices) || choices.length < 4) return null;
+    const mapped: Record<string,string> = {};
+    for (let i=0;i<4;i++) {
+      let text = String(choices[i]);
+      if (/^[A-D]\.?\s*/i.test(text)) {
+        text = text.replace(/^[A-D]\.?\s*/i, "");
+      }
+      mapped[letters[i]] = text;
+    }
+    return mapped;
+  };
+
+  const normalizeAnswer = (ans:any): string | null => {
+    let a = String(ans).trim();
+    if (/^[0-3]$/.test(a)) return letters[parseInt(a)];
+    if (/^[a-d]$/i.test(a)) return a.toUpperCase();
+    if (letters.includes(a as typeof letters[number])) return a as string;
+    return null;
+  };
+
   return value
-    .map((q: any) => {
+    .map((q:any) => {
       if (!q?.question) return null;
-      // Handle options as object (uppercase or lowercase keys)
-      let opts: Record<string, string> | null = null;
-      if (q.options && typeof q.options === "object" && !Array.isArray(q.options)) {
-        const keys = Object.keys(q.options);
-        const hasUpper = keys.some((k) => letters.includes(k as typeof letters[number]));
-        if (hasUpper) {
-          opts = q.options as Record<string, string>;
-        } else {
-          // lowercase keys → normalize to uppercase
-          const mapped: Record<string, string> = {};
-          for (const l of letters) {
-            const val = q.options[l.toLowerCase()];
-            if (val) mapped[l] = String(val);
-          }
-          if (Object.keys(mapped).length === 4) opts = mapped;
-        }
-      }
-      // Handle choices/options as array ["A text", "B text", ...] or ["opt1", "opt2", ...]
-      if (!opts) {
-        const arr = q.choices || (Array.isArray(q.options) ? q.options : null);
-        if (Array.isArray(arr) && arr.length >= 4) {
-          opts = {};
-          for (let i = 0; i < 4; i++) opts[letters[i]] = String(arr[i]);
-        }
-      }
+      let opts = mapOptions(q.options);
+      if (!opts) opts = mapChoices(q.choices || q.options);
       if (!opts) return null;
-      // Validate all 4 options exist
-      for (const l of letters) {
-        if (!opts[l] || String(opts[l]).trim().length === 0) return null;
-      }
-      const ans = String(q.correctAnswer || q.answer || q.correct || "").toUpperCase().trim();
-      if (!letters.includes(ans as typeof letters[number])) return null;
-      return {
-        question: String(q.question),
-        options: { A: opts.A, B: opts.B, C: opts.C, D: opts.D },
-        correctAnswer: ans,
-      } as MCQQuestion;
+      const answer = normalizeAnswer(q.correctAnswer || q.answer || q.correct);
+      if (!answer) return null;
+      return { question: String(q.question), options: { A: opts.A, B: opts.B, C: opts.C, D: opts.D }, correctAnswer: answer } as MCQQuestion;
     })
     .filter((q): q is MCQQuestion => q !== null);
 };
-
-const AssessmentPage = () => {
+  const AssessmentPage = () => {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [phase, setPhase] = useState<Phase>("select");
@@ -173,7 +179,9 @@ const AssessmentPage = () => {
     setTimeRemaining(minutes * 60);
   };
 
-  if (!profile) return null;
+  if (!profile) {
+    return null;
+  }
 
   const topics = selectedSubject ? (SUBJECT_TOPICS[selectedSubject] || []) : [];
   const hasPaper1 = SUBJECTS_WITH_PAPER1.includes(selectedSubject);
@@ -1246,7 +1254,6 @@ const AssessmentPage = () => {
               </Button>
             </div>
           </motion.div>
-          );
         })()}
       </div>
     </AppLayout>
